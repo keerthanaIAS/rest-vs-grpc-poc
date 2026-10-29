@@ -17,16 +17,18 @@ service BankGateway {
 }
 
 message TransferRequest {
-  string account_id = 1;
-  string recipient_account = 2;
-  double amount = 3;
-  string currency = 4;
+  string request_id = 1;
+  string account_id = 2;
+  string recipient_account = 3;
+  double amount = 4;
+  string currency = 5;
 }
 
 message TransferResponse {
-  string bank_transaction_id = 1;
-  string status = 2;
-  double remaining_balance = 3;
+  string request_id = 1;
+  string bank_transaction_id = 2;
+  string status = 3;
+  double remaining_balance = 4;
 }
 
 message HistoryRequest {

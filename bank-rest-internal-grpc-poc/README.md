@@ -948,3 +948,137 @@ kubectl run internal-app-client-pod \
 kubectl logs -f internal-app-client-pod
 
 ```
+
+###### The key difference from unary:
+
+1. Unary RPC
+One request → one response
+
+Client ── Request ──> Gateway
+Client <── Response ─ Gateway
+    
+2. Bidirectional RPC
+Multiple requests ↔ multiple responses
+
+Client ── Request 1 ──> Gateway
+Client ── Request 2 ──> Gateway
+Client <── Response 2 ─ Gateway
+Client ── Request 3 ──> Gateway
+Client <── Response 3 ─ Gateway
+Client <── Response 1 ─ Gateway
+    
+*One technical point: bidirectional streaming does not automatically make processing faster. Your gateway still makes individual REST calls, and each bank transfer has its own processing time. The advantage demonstrated here is that requests and responses can progress independently over one persistent gRPC stream.*
+
+# Metadata POC:
+
+          * When the internal banking app calls the gRPC gateway, it will attach metadata identifying the calling service and the request. The gateway will read it, validate it, and log it before processing the call.
+
+          Internal Banking App
+            |
+            | mTLS + gRPC request
+            | Metadata:
+            |   x-service-name: internal-banking-app
+            |   x-correlation-id: TRACE-123
+            |
+            v
+          gRPC Gateway
+            |
+            | Validate and log metadata
+            | Forward business request to Bank REST API
+            v
+          Bank REST API
+
+Will use:
+- x-service-name — caller's declared service name.
+- x-correlation-id — identifier used to connect logs for the same operation.
+- x-request-id — identifier for an individual request, such as PAY-001.
+
+## Understand what we are adding
+Deadline	-  Maximum time allowed for the entire gRPC call
+Timeout	 -  Stops waiting when the operation takes too long
+Error handling	-  Returns meaningful gRPC status codes instead of crashing
+Client error handling	 -  Handles timeout, unavailable gateway, and server errors
+
+### Rebuild code changes and update Minikube images: It includes build → load into Minikube → restart → verify → run the client.
+
+Run everything from your POC directory: `bank-rest-internal-grpc-poc`.
+
+1. Rebuild the three images
+
+```
+docker build --no-cache -t external-bank-api:latest -f Dockerfile.bank .
+docker build --no-cache -t gateway-service:latest -f Dockerfile.gateway .
+docker build --no-cache -t internal-banking-service:latest -f Dockerfile.internal .
+```
+
+2. Load images into Minikube
+
+```
+minikube image load external-bank-api:latest
+minikube image load gateway-service:latest
+minikube image load internal-banking-service:latest
+```
+
+3. Restart deployments
+
+```
+kubectl rollout restart deployment/external-bank-api
+kubectl rollout restart deployment/gateway-service
+kubectl rollout restart deployment/internal-banking-service
+```
+
+4. Wait for deployments
+
+```
+kubectl rollout status deployment/external-bank-api
+kubectl rollout status deployment/gateway-service
+kubectl rollout status deployment/internal-banking-service
+```
+
+5. Run the internal application client
+
+Delete the previous client pod and create a fresh one so it runs the latest client image:
+
+```
+kubectl delete pod internal-app-client-pod --ignore-not-found
+
+kubectl run internal-app-client-pod \
+  --image=internal-app-client:latest \
+  --image-pull-policy=Never \
+  --restart=Never \
+  --env="GATEWAY_HOST=gateway-service.default.svc.cluster.local:3003"
+```
+
+6. View client output
+
+```
+kubectl logs -f internal-app-client-pod
+```
+
+7. Check gateway and REST API logs
+
+```
+kubectl logs deployment/gateway-service \
+  --all-pods=true --prefix=true --since=5m
+
+kubectl logs deployment/external-bank-api --since=5m
+```
+
+8. Verify all resources
+
+```
+kubectl get deployments,pods,services
+```
+
+Important: Check your actual Dockerfile names before using these commands:
+
+```
+ls Dockerfile*
+```
+
+I know your project has `Dockerfile.bank` and `Dockerfile.gateway`; I haven't confirmed that `Dockerfile.internal` exists. Also, if you modify `internal-app-client.js`, rebuild and load `internal-app-client:latest` separately before recreating its pod:
+
+```
+docker build --no-cache -t internal-app-client:latest -f Dockerfile.client .
+minikube image load internal-app-client:latest
+```

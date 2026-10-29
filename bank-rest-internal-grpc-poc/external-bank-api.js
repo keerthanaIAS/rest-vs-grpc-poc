@@ -7,11 +7,14 @@ app.post("/v1/bank/transfer", (req, res) => {
   const { account_id, recipient_account, amount } = req.body;
   console.log(`🏦 [External Bank API] Received REST Transfer: $${amount} from ${account_id} to ${recipient_account}`);
 
-  res.json({
-    bank_transaction_id: `BANK-TXN-${Date.now()}`,
-    status: "SETTLED",
-    remaining_balance: 10000.0 - amount
-  });
+  // Simulate a slow REST API response for timeout testing
+  setTimeout(() => { // use this for timeout testing after that command out the setTimeout
+    res.json({
+      bank_transaction_id: `BANK-TXN-${Date.now()}`,
+      status: "SETTLED",
+      remaining_balance: 10000.0 - amount
+    });
+  }, 500);
 });
 
 // 2. Bank REST Endpoint: Get Transaction History List
