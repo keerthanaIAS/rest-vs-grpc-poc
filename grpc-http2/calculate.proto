@@ -1,0 +1,43 @@
+
+syntax = "proto3";
+
+package calculator;
+
+service Calculator {
+  // Unary: one request, one response
+  rpc Add(AddRequest) returns (AddResponse);
+
+  // Client streaming: multiple requests, one response
+  rpc AddStream(stream AddRequest) returns (AddResponse);
+
+  // Server streaming: one request, multiple responses
+  rpc Count(CountRequest) returns (stream CountResponse);
+
+  // Bidirectional streaming: multiple requests and responses
+  rpc Chat(stream ChatRequest) returns (stream ChatResponse);
+}
+
+message AddRequest {
+  int32 a = 1;
+  int32 b = 2;
+}
+
+message AddResponse {
+  int32 result = 1;
+}
+
+message CountRequest {
+  int32 count = 1;
+}
+
+message CountResponse {
+  int32 number = 1;
+}
+
+message ChatRequest {
+  string message = 1;
+}
+
+message ChatResponse {
+  string reply = 1;
+}

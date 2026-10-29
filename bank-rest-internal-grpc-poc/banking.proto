@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package banking;
+
+service BankGateway {
+  // 1. Unary: Single Fund Transfer
+  rpc RequestTransfer (TransferRequest) returns (TransferResponse);
+
+  // 2. Server Streaming: Stream transaction history frame-by-frame
+  rpc StreamTransactionHistory (HistoryRequest) returns (stream TransactionRecord);
+
+  // 3. Client Streaming: Bulk Payroll CSV File Upload (Many Chunks -> 1 Final Batch Confirmation)
+  rpc UploadPayrollFile (stream FileChunk) returns (FileUploadResponse);
+
+  // 4. Bidirectional Streaming: Live Real-Time Payouts (Stream Requests <---> Stream Immediate Bank Receipts)
+  rpc LivePayoutStream (stream TransferRequest) returns (stream TransferResponse);
+}
+
+message TransferRequest {
+  string account_id = 1;
+  string recipient_account = 2;
+  double amount = 3;
+  string currency = 4;
+}
+
+message TransferResponse {
+  string bank_transaction_id = 1;
+  string status = 2;
+  double remaining_balance = 3;
+}
+
+message HistoryRequest {
+  string account_id = 1;
+  int32 limit = 2;
+}
+
+message TransactionRecord {
+  string transaction_id = 1;
+  string timestamp = 2;
+  string type = 3;
+  double amount = 4;
+  string status = 5;
+}
+
+message FileChunk {
+  string filename = 1;
+  bytes content = 2;
+}
+
+message FileUploadResponse {
+  string file_id = 1;
+  int32 total_bytes_received = 2;
+  string status = 3;
+}

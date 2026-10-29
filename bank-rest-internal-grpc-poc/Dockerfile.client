@@ -1,0 +1,7 @@
+FROM node:18-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY banking.proto internal-app-client.js ./
+COPY certs ./certs
+CMD ["node", "internal-app-client.js"]

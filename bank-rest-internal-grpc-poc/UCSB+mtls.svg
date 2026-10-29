@@ -1,0 +1,327 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="1900" viewBox="0 0 1300 1900"
+     font-family="Consolas, Menlo, monospace">
+  <defs>
+    <marker id="arrB" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#1d54c8"/>
+    </marker>
+    <marker id="arrR" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#c63f8a"/>
+    </marker>
+  </defs>
+  <rect width="1300" height="1900" fill="#ffffff"/>
+
+  <text x="650" y="30" text-anchor="middle" font-size="17" font-weight="bold" fill="#111">
+    END-TO-END SEQUENCE — WHAT EACH SERVICE DOES AT EVERY STEP
+  </text>
+
+  <!-- ============================================================ -->
+  <!-- ACTOR HEADERS -->
+  <!-- ============================================================ -->
+  <!-- Internal App -->
+  <rect x="40" y="60" width="300" height="70" rx="6" fill="#eef4ff" stroke="#1d54c8" stroke-width="2"/>
+  <text x="190" y="86" text-anchor="middle" font-size="13" font-weight="bold" fill="#12357f">Internal App Client</text>
+  <text x="190" y="106" text-anchor="middle" font-size="11" fill="#333">(gRPC Client)</text>
+  <text x="190" y="122" text-anchor="middle" font-size="10" fill="#666">business pod · holds client.crt</text>
+
+  <!-- Gateway -->
+  <rect x="500" y="60" width="300" height="70" rx="6" fill="#e9fbe9" stroke="#2e8b2e" stroke-width="2"/>
+  <text x="650" y="86" text-anchor="middle" font-size="13" font-weight="bold" fill="#1d5c1d">Gateway Service</text>
+  <text x="650" y="106" text-anchor="middle" font-size="11" fill="#333">(gRPC Server + REST Client)</text>
+  <text x="650" y="122" text-anchor="middle" font-size="10" fill="#666">holds server.crt · translates Proto ⇄ JSON</text>
+
+  <!-- External Bank -->
+  <rect x="960" y="60" width="300" height="70" rx="6" fill="#ffe9f0" stroke="#c63f8a" stroke-width="2"/>
+  <text x="1110" y="86" text-anchor="middle" font-size="13" font-weight="bold" fill="#7a1d4a">External Bank REST API</text>
+  <text x="1110" y="106" text-anchor="middle" font-size="11" fill="#333">(Mock Bank API)</text>
+  <text x="1110" y="122" text-anchor="middle" font-size="10" fill="#666">settles transfers · returns receipts</text>
+
+  <!-- Lifelines -->
+  <line x1="190"  y1="130" x2="190"  y2="1840" stroke="#1d54c8" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <line x1="650"  y1="130" x2="650"  y2="1840" stroke="#2e8b2e" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <line x1="1110" y1="130" x2="1110" y2="1840" stroke="#c63f8a" stroke-width="1.5" stroke-dasharray="5,4"/>
+
+  <!-- ============================================================ -->
+  <!-- PHASE 1 — mTLS -->
+  <!-- ============================================================ -->
+  <rect x="20" y="150" width="1260" height="30" rx="4" fill="#1d54c8"/>
+  <text x="650" y="170" text-anchor="middle" font-size="13" font-weight="bold" fill="#fff">
+    PHASE 1 — mTLS SECURITY HANDSHAKE
+  </text>
+
+  <!-- Annotations -->
+  <rect x="210" y="192" width="600" height="26" rx="4" fill="#e8f3ff" stroke="#3b6fd8" stroke-dasharray="3,2"/>
+  <text x="220" y="210" font-size="10" fill="#12357f">
+    Internal App: "I'm about to open a secure channel. Prove who you are."
+  </text>
+
+  <!-- 1. send client.crt -->
+  <line x1="190" y1="234" x2="650" y2="234" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="228" text-anchor="middle" font-size="11" fill="#12357f">① Send client.crt</text>
+
+  <rect x="660" y="238" width="470" height="24" rx="3" fill="#f0fff0" stroke="#2e8b2e" stroke-dasharray="3,2"/>
+  <text x="670" y="255" font-size="10" fill="#1d5c1d">
+    Gateway: verifies client.crt against shared ca.crt · rejects if unknown
+  </text>
+
+  <!-- 2. send server.crt -->
+  <line x1="650" y1="282" x2="190" y2="282" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="276" text-anchor="middle" font-size="11" fill="#12357f">② Send server.crt</text>
+
+  <rect x="210" y="286" width="470" height="24" rx="3" fill="#f0f0ff" stroke="#1d54c8" stroke-dasharray="3,2"/>
+  <text x="220" y="303" font-size="10" fill="#12357f">
+    Internal App: verifies server.crt against shared ca.crt · aborts if mismatch
+  </text>
+
+  <!-- 3. both verify -->
+  <rect x="210" y="320" width="920" height="30" rx="4" fill="#fff8e1" stroke="#d88a1e"/>
+  <text x="670" y="340" text-anchor="middle" font-size="11" fill="#8a4d00">
+    ③ Both sides independently validate the other's certificate using the shared Root CA (ca.crt) — no passwords, no API keys
+  </text>
+
+  <!-- 4. channel established -->
+  <rect x="210" y="358" width="920" height="34" rx="4" fill="#e6ffe6" stroke="#2e8b2e" stroke-width="2"/>
+  <text x="670" y="372" text-anchor="middle" font-size="11" font-weight="bold" fill="#1d5c1d">
+    ④ HTTP/2 mTLS channel ESTABLISHED on port 3003
+  </text>
+  <text x="670" y="387" text-anchor="middle" font-size="10" fill="#1d5c1d">
+    Every subsequent frame on this channel is encrypted and bound to those two identities
+  </text>
+
+  <!-- ============================================================ -->
+  <!-- PHASE 2 — Unary -->
+  <!-- ============================================================ -->
+  <rect x="20" y="410" width="1260" height="30" rx="4" fill="#2e8b2e"/>
+  <text x="650" y="430" text-anchor="middle" font-size="13" font-weight="bold" fill="#fff">
+    PHASE 2 — PATTERN 1 · UNARY RPC  (1 request → 1 response)
+  </text>
+
+  <!-- request -->
+  <line x1="190" y1="470" x2="650" y2="470" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="464" text-anchor="middle" font-size="11" fill="#12357f">① RequestTransfer($250)</text>
+
+  <rect x="210" y="474" width="420" height="24" rx="3" fill="#f0f0ff" stroke="#1d54c8" stroke-dasharray="3,2"/>
+  <text x="220" y="491" font-size="10" fill="#12357f">
+    Internal App: serialises Protobuf · writes frame onto the mTLS channel
+  </text>
+
+  <rect x="660" y="474" width="470" height="40" rx="3" fill="#f0fff0" stroke="#2e8b2e" stroke-dasharray="3,2"/>
+  <text x="670" y="490" font-size="10" fill="#1d5c1d">
+    Gateway: decodes Protobuf fields → builds JSON payload
+  </text>
+  <text x="670" y="506" font-size="10" fill="#1d5c1d">
+    {from: ACC-101, to: BANK-ACC-99, amount: 250}
+  </text>
+
+  <!-- rest call -->
+  <line x1="650" y1="534" x2="1110" y2="534" stroke="#c63f8a" stroke-width="2" marker-end="url(#arrR)"/>
+  <text x="880" y="528" text-anchor="middle" font-size="11" fill="#7a1d1d">② POST /v1/bank/transfer</text>
+
+  <rect x="670" y="538" width="460" height="24" rx="3" fill="#fff0f6" stroke="#c63f8a" stroke-dasharray="3,2"/>
+  <text x="680" y="555" font-size="10" fill="#7a1d4a">
+    Bank: validates JSON · debits/credits ledger · persists record
+  </text>
+
+  <!-- response -->
+  <line x1="1110" y1="582" x2="650" y2="582" stroke="#c63f8a" stroke-width="2" marker-end="url(#arrR)"/>
+  <text x="880" y="576" text-anchor="middle" font-size="11" fill="#7a1d1d">③ 200 OK {bank_transaction_id, SETTLED, 9750}</text>
+
+  <rect x="660" y="586" width="470" height="24" rx="3" fill="#f0fff0" stroke="#2e8b2e" stroke-dasharray="3,2"/>
+  <text x="670" y="603" font-size="10" fill="#1d5c1d">
+    Gateway: wraps JSON into TransferResponse Protobuf message
+  </text>
+
+  <line x1="650" y1="630" x2="190" y2="630" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="624" text-anchor="middle" font-size="11" fill="#12357f">④ TransferResponse(SETTLED)</text>
+
+  <rect x="210" y="634" width="420" height="24" rx="3" fill="#f0f0ff" stroke="#1d54c8" stroke-dasharray="3,2"/>
+  <text x="220" y="651" font-size="10" fill="#12357f">
+    Internal App: decodes Protobuf · resumes business logic
+  </text>
+
+  <!-- ============================================================ -->
+  <!-- PHASE 3 — Server Streaming -->
+  <!-- ============================================================ -->
+  <rect x="20" y="678" width="1260" height="30" rx="4" fill="#7a3bb8"/>
+  <text x="650" y="698" text-anchor="middle" font-size="13" font-weight="bold" fill="#fff">
+    PHASE 3 — PATTERN 2 · SERVER STREAMING  (1 request → N streamed frames)
+  </text>
+
+  <line x1="190" y1="738" x2="650" y2="738" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="732" text-anchor="middle" font-size="11" fill="#12357f">① StreamTransactionHistory(ACC-101)</text>
+
+  <rect x="210" y="742" width="420" height="24" rx="3" fill="#f0f0ff" stroke="#1d54c8" stroke-dasharray="3,2"/>
+  <text x="220" y="759" font-size="10" fill="#12357f">
+    Internal App: subscribes to a stream · expects many frames back
+  </text>
+
+  <line x1="650" y1="786" x2="1110" y2="786" stroke="#c63f8a" stroke-width="2" marker-end="url(#arrR)"/>
+  <text x="880" y="780" text-anchor="middle" font-size="11" fill="#7a1d1d">② GET /v1/bank/accounts/ACC-101/history</text>
+
+  <rect x="670" y="790" width="460" height="24" rx="3" fill="#fff0f6" stroke="#c63f8a" stroke-dasharray="3,2"/>
+  <text x="680" y="807" font-size="10" fill="#7a1d4a">
+    Bank: reads ledger · returns full array [Tx1, Tx2, Tx3]
+  </text>
+
+  <line x1="1110" y1="834" x2="650" y2="834" stroke="#c63f8a" stroke-width="2" marker-end="url(#arrR)"/>
+  <text x="880" y="828" text-anchor="middle" font-size="11" fill="#7a1d1d">③ 200 OK [Tx1, Tx2, Tx3]</text>
+
+  <rect x="660" y="838" width="470" height="40" rx="3" fill="#f0fff0" stroke="#2e8b2e" stroke-dasharray="3,2"/>
+  <text x="670" y="854" font-size="10" fill="#1d5c1d">
+    Gateway: does NOT buffer the whole array for the client —
+  </text>
+  <text x="670" y="870" font-size="10" fill="#1d5c1d">
+    emits each record as its own protobuf frame, one per write()
+  </text>
+
+  <line x1="650" y1="898" x2="190" y2="898" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="892" text-anchor="middle" font-size="11" fill="#12357f">④ Frame 1 · Tx1</text>
+
+  <line x1="650" y1="922" x2="190" y2="922" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="916" text-anchor="middle" font-size="11" fill="#12357f">⑤ Frame 2 · Tx2</text>
+
+  <line x1="650" y1="946" x2="190" y2="946" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="940" text-anchor="middle" font-size="11" fill="#12357f">⑥ Frame 3 · Tx3</text>
+
+  <line x1="650" y1="970" x2="190" y2="970" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="964" text-anchor="middle" font-size="11" fill="#12357f">⑦ END_STREAM</text>
+
+  <rect x="210" y="974" width="440" height="24" rx="3" fill="#f0f0ff" stroke="#1d54c8" stroke-dasharray="3,2"/>
+  <text x="220" y="991" font-size="10" fill="#12357f">
+    Internal App: processes each frame as it arrives · no big array in memory
+  </text>
+
+  <!-- ============================================================ -->
+  <!-- PHASE 4 — Client Streaming -->
+  <!-- ============================================================ -->
+  <rect x="20" y="1018" width="1260" height="30" rx="4" fill="#c63f8a"/>
+  <text x="650" y="1038" text-anchor="middle" font-size="13" font-weight="bold" fill="#fff">
+    PHASE 4 — PATTERN 3 · CLIENT STREAMING  (N chunks → 1 summary)
+  </text>
+
+  <line x1="190" y1="1078" x2="650" y2="1078" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="1072" text-anchor="middle" font-size="11" fill="#12357f">① Chunk 1 (payroll.csv)</text>
+
+  <line x1="190" y1="1102" x2="650" y2="1102" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="1096" text-anchor="middle" font-size="11" fill="#12357f">② Chunk 2 (payroll.csv)</text>
+
+  <line x1="190" y1="1126" x2="650" y2="1126" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="1120" text-anchor="middle" font-size="11" fill="#12357f">③ Chunk 3 (payroll.csv)</text>
+
+  <line x1="190" y1="1150" x2="650" y2="1150" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="1144" text-anchor="middle" font-size="11" fill="#12357f">④ END_STREAM (fileStream.end())</text>
+
+  <rect x="660" y="1088" width="470" height="56" rx="3" fill="#f0fff0" stroke="#2e8b2e" stroke-dasharray="3,2"/>
+  <text x="670" y="1106" font-size="10" fill="#1d5c1d">
+    Gateway: silently accumulates chunks via call.on("data")
+  </text>
+  <text x="670" y="1122" font-size="10" fill="#1d5c1d">
+    — does NOT reply per chunk —
+  </text>
+  <text x="670" y="1138" font-size="10" fill="#1d5c1d">
+    on "end": computes byte count · verifies file · prepares summary
+  </text>
+
+  <line x1="650" y1="1180" x2="190" y2="1180" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="1174" text-anchor="middle" font-size="11" fill="#12357f">⑤ FileUploadResponse · one summary</text>
+
+  <rect x="210" y="1184" width="420" height="24" rx="3" fill="#f0f0ff" stroke="#1d54c8" stroke-dasharray="3,2"/>
+  <text x="220" y="1201" font-size="10" fill="#12357f">
+    Internal App: receives {total_bytes_received: 28, status: FILE_UPLOADED_AND_VERIFIED}
+  </text>
+
+  <!-- ============================================================ -->
+  <!-- PHASE 5 — Bidirectional -->
+  <!-- ============================================================ -->
+  <rect x="20" y="1228" width="1260" height="30" rx="4" fill="#d88a1e"/>
+  <text x="650" y="1248" text-anchor="middle" font-size="13" font-weight="bold" fill="#fff">
+    PHASE 5 — PATTERN 4 · BIDIRECTIONAL STREAMING  (N requests ⇄ N live responses)
+  </text>
+
+  <!-- Round trip 1 -->
+  <line x1="190" y1="1288" x2="650" y2="1288" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="1282" text-anchor="middle" font-size="11" fill="#12357f">① LivePayout Item 1 ($100)</text>
+
+  <line x1="650" y1="1312" x2="1110" y2="1312" stroke="#c63f8a" stroke-width="2" marker-end="url(#arrR)"/>
+  <text x="880" y="1306" text-anchor="middle" font-size="11" fill="#7a1d1d">POST /v1/bank/transfer ($100)</text>
+
+  <line x1="1110" y1="1336" x2="650" y2="1336" stroke="#c63f8a" stroke-width="2" marker-end="url(#arrR)"/>
+  <text x="880" y="1330" text-anchor="middle" font-size="11" fill="#7a1d1d">200 OK (Bank Receipt 101)</text>
+
+  <line x1="650" y1="1360" x2="190" y2="1360" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="1354" text-anchor="middle" font-size="11" fill="#12357f">② Live Bank Receipt 101 ← streamed back immediately</text>
+
+  <rect x="210" y="1364" width="900" height="22" rx="3" fill="#fff8e1" stroke="#d88a1e" stroke-dasharray="3,2"/>
+  <text x="220" y="1379" font-size="10" fill="#8a4d00">
+    Internal App gets its receipt BEFORE it sends item 2 — full duplex
+  </text>
+
+  <!-- Round trip 2 -->
+  <line x1="190" y1="1408" x2="650" y2="1408" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="1402" text-anchor="middle" font-size="11" fill="#12357f">③ LivePayout Item 2 ($200)</text>
+
+  <line x1="650" y1="1432" x2="1110" y2="1432" stroke="#c63f8a" stroke-width="2" marker-end="url(#arrR)"/>
+  <text x="880" y="1426" text-anchor="middle" font-size="11" fill="#7a1d1d">POST /v1/bank/transfer ($200)</text>
+
+  <line x1="1110" y1="1456" x2="650" y2="1456" stroke="#c63f8a" stroke-width="2" marker-end="url(#arrR)"/>
+  <text x="880" y="1450" text-anchor="middle" font-size="11" fill="#7a1d1d">200 OK (Bank Receipt 102)</text>
+
+  <line x1="650" y1="1480" x2="190" y2="1480" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="1474" text-anchor="middle" font-size="11" fill="#12357f">④ Live Bank Receipt 102</text>
+
+  <!-- Round trip 3 (item 3) -->
+  <line x1="190" y1="1512" x2="650" y2="1512" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="1506" text-anchor="middle" font-size="11" fill="#12357f">⑤ LivePayout Item 3 ($300)</text>
+
+  <line x1="650" y1="1536" x2="1110" y2="1536" stroke="#c63f8a" stroke-width="2" marker-end="url(#arrR)"/>
+  <text x="880" y="1530" text-anchor="middle" font-size="11" fill="#7a1d1d">POST /v1/bank/transfer ($300)</text>
+
+  <line x1="1110" y1="1560" x2="650" y2="1560" stroke="#c63f8a" stroke-width="2" marker-end="url(#arrR)"/>
+  <text x="880" y="1554" text-anchor="middle" font-size="11" fill="#7a1d1d">200 OK (Bank Receipt 103)</text>
+
+  <line x1="650" y1="1584" x2="190" y2="1584" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="1578" text-anchor="middle" font-size="11" fill="#12357f">⑥ Live Bank Receipt 103</text>
+
+  <!-- close -->
+  <line x1="190" y1="1616" x2="650" y2="1616" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="1610" text-anchor="middle" font-size="11" fill="#12357f">⑦ END_STREAM (bidiStream.end())</text>
+
+  <line x1="650" y1="1640" x2="1110" y2="1640" stroke="#c63f8a" stroke-width="2" marker-end="url(#arrR)"/>
+  <text x="880" y="1634" text-anchor="middle" font-size="11" fill="#7a1d1d">Close session</text>
+
+  <line x1="650" y1="1664" x2="190" y2="1664" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="420" y="1658" text-anchor="middle" font-size="11" fill="#12357f">⑧ END_STREAM</text>
+
+  <rect x="210" y="1668" width="900" height="22" rx="3" fill="#fff8e1" stroke="#d88a1e" stroke-dasharray="3,2"/>
+  <text x="220" y="1683" font-size="10" fill="#8a4d00">
+    Both halves of the stream close cleanly — the mTLS channel stays open for the next RPC
+  </text>
+
+  <!-- ============================================================ -->
+  <!-- Footer actors -->
+  <!-- ============================================================ -->
+  <rect x="40" y="1760" width="300" height="60" rx="6" fill="#eef4ff" stroke="#1d54c8" stroke-width="2"/>
+  <text x="190" y="1784" text-anchor="middle" font-size="12" font-weight="bold" fill="#12357f">Internal App Client</text>
+  <text x="190" y="1804" text-anchor="middle" font-size="10" fill="#333">(gRPC Client)</text>
+
+  <rect x="500" y="1760" width="300" height="60" rx="6" fill="#e9fbe9" stroke="#2e8b2e" stroke-width="2"/>
+  <text x="650" y="1784" text-anchor="middle" font-size="12" font-weight="bold" fill="#1d5c1d">Gateway Service</text>
+  <text x="650" y="1804" text-anchor="middle" font-size="10" fill="#333">(gRPC Server + REST Client)</text>
+
+  <rect x="960" y="1760" width="300" height="60" rx="6" fill="#ffe9f0" stroke="#c63f8a" stroke-width="2"/>
+  <text x="1110" y="1784" text-anchor="middle" font-size="12" font-weight="bold" fill="#7a1d4a">External Bank REST API</text>
+  <text x="1110" y="1804" text-anchor="middle" font-size="10" fill="#333">(Mock Bank API)</text>
+
+  <!-- Legend -->
+  <rect x="40" y="1840" width="1220" height="40" rx="4" fill="#f7f7f7" stroke="#ccc"/>
+  <line x1="60" y1="1860" x2="100" y2="1860" stroke="#1d54c8" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="110" y="1864" font-size="11" fill="#333">gRPC over HTTP/2 (Protobuf)</text>
+
+  <line x1="360" y1="1860" x2="400" y2="1860" stroke="#c63f8a" stroke-width="2" marker-end="url(#arrR)"/>
+  <text x="410" y="1864" font-size="11" fill="#333">REST / JSON</text>
+
+  <rect x="620" y="1852" width="20" height="14" fill="#e8f3ff" stroke="#3b6fd8" stroke-dasharray="3,2"/>
+  <text x="650" y="1864" font-size="11" fill="#333">what the sender is doing</text>
+
+  <rect x="920" y="1852" width="20" height="14" fill="#f0fff0" stroke="#2e8b2e" stroke-dasharray="3,2"/>
+  <text x="950" y="1864" font-size="11" fill="#333">what the receiver is doing</text>
+</svg>
