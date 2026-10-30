@@ -23,19 +23,47 @@ const rootCa = fs.readFileSync(
   path.join(certsDir, "ca.crt")
 );
 
-const clientCert = fs.readFileSync(
-  path.join(certsDir, "client.crt")
-);
+const TEST_UNAUTHENTICATED =
+  process.env.TEST_UNAUTHENTICATED === "true";
 
-const clientKey = fs.readFileSync(
-  path.join(certsDir, "client.key")
-);
+let sslCredentials;
 
-const sslCredentials = grpc.credentials.createSsl(
-  rootCa,
-  clientKey,
-  clientCert
-);
+if (TEST_UNAUTHENTICATED) {
+  console.log(
+    "⚠️ TEST MODE: Connecting without client certificate"
+  );
+
+  sslCredentials = grpc.credentials.createSsl(rootCa);
+} else {
+  const clientCert = fs.readFileSync(
+    path.join(certsDir, "client.crt")
+  );
+
+  const clientKey = fs.readFileSync(
+    path.join(certsDir, "client.key")
+  );
+
+  sslCredentials = grpc.credentials.createSsl(
+    rootCa,
+    clientKey,
+    clientCert
+  );
+}
+
+//  Here I command this to test the unauthenticated scenario, so that i can test the error handling for unauthenticated scenario.
+// const clientCert = fs.readFileSync(
+//   path.join(certsDir, "client.crt")
+// );
+
+// const clientKey = fs.readFileSync(
+//   path.join(certsDir, "client.key")
+// );
+
+// const sslCredentials = grpc.credentials.createSsl(
+//   rootCa,
+//   clientKey,
+//   clientCert
+// );
 
 // --------------------------------------------------
 // gRPC CLIENT
@@ -61,6 +89,10 @@ const CORRELATION_ID = `TRACE-${Date.now()}`;
 
 function createCallMetadata(requestId) {
   const metadata = new grpc.Metadata();
+
+  if (process.env.TEST_RPC_UNAUTHENTICATED !== "true") {
+    metadata.add("authorization", "Bearer bank-poc-secret");
+  }
 
   metadata.set(
     "x-service-name",
@@ -96,9 +128,7 @@ function createDeadline(seconds = 5) {
 
 function handleGrpcError(error, operation) {
   console.error(`❌ ${operation} failed`);
-
   console.error("   Code:", error.code);
-
   console.error("   Details:", error.details);
 
   switch (error.code) {
@@ -126,11 +156,23 @@ function handleGrpcError(error, operation) {
       );
       break;
 
-    case grpc.status.INTERNAL:
+    case grpc.status.UNAUTHENTICATED:
       console.error(
-        "   Reason: Internal server error"
+        "   Reason: Caller authentication failed"
       );
       break;
+
+    case grpc.status.INTERNAL:
+      console.error(
+        "   Reason: Unexpected server-side failure"
+      );
+      break;
+
+    // case grpc.status.INTERNAL:
+    //   console.error(
+    //     "   Reason: Internal server error"
+    //   );
+    //   break;
 
     default:
       console.error(
@@ -147,10 +189,14 @@ function executeUnaryTransfer() {
   return new Promise((resolve) => {
     console.log("\n1️⃣ Executing Unary Transfer...");
 
+    // Test invalid argument scenario by setting amount to a negative value, After completed the invalid argument test, change amount field to get the valid result
+    const TEST_INVALID_ARGUMENT =
+      process.env.TEST_INVALID_ARGUMENT === "true";
+
     const request = {
       account_id: "ACC-101",
       recipient_account: "BANK-ACC-99",
-      amount: 250.0,
+      amount: TEST_INVALID_ARGUMENT ? -250 : 250.0,
       currency: "USD",
     };
 
@@ -345,7 +391,7 @@ function executeBidirectionalStreaming() {
 
       console.log(
         `📩 RECEIVED RECEIPT: ${receipt.request_id} | ` +
-          `${receipt.status} | ${receipt.bank_transaction_id}`
+        `${receipt.status} | ${receipt.bank_transaction_id}`
       );
     });
 

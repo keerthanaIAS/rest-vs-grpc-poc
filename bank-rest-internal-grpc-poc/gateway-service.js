@@ -15,8 +15,24 @@ const bankingProto = grpc.loadPackageDefinition(packageDef).banking;
 const BANK_REST_URL =
   process.env.BANK_REST_URL || "http://localhost:8080";
 
-// const BANK_TIMEOUT = Number(process.env.BANK_TIMEOUT_MS || 5000); // to test timeout, set to 100ms
-const BANK_TIMEOUT = 100;
+const BANK_TIMEOUT = Number(process.env.BANK_TIMEOUT_MS || 5000); // to test timeout, set to 100ms
+
+// --------------------------------------------------
+// UNAUTHENTICATED
+// --------------------------------------------------
+
+function validateAuthentication(call) {
+  const token = call.metadata.get("authorization")[0];
+
+  if (token !== "Bearer bank-poc-secret") {
+    return {
+      code: grpc.status.UNAUTHENTICATED,
+      details: "Missing or invalid authentication token",
+    };
+  }
+
+  return null;
+}
 
 // --------------------------------------------------
 // METADATA
@@ -172,6 +188,25 @@ async function requestTransfer(call, callback) {
   const metadata = logCallMetadata(call, "RequestTransfer");
 
   const request = call.request;
+
+  // Simulate an unexpected internal failure for testing purposes
+  if (process.env.TEST_INTERNAL === "true") {
+    console.error(
+      "[RequestTransfer] Simulated unexpected internal failure"
+    );
+
+    return callback({
+      code: grpc.status.INTERNAL,
+      details: "Unexpected internal banking gateway failure",
+    });
+  }
+
+  // authentication
+  const authError = validateAuthentication(call);
+
+  if (authError) {
+    return callback(authError);
+  }
 
   const validationError = validateTransfer(request);
 
@@ -342,7 +377,7 @@ function livePayoutStream(call) {
 
     console.log(
       `📥 Received ${transaction.request_id}: ` +
-        `$${transaction.amount} to ${transaction.recipient_account}`
+      `$${transaction.amount} to ${transaction.recipient_account}`
     );
 
     const validationError = validateTransfer(transaction);
@@ -446,7 +481,7 @@ const serverCredentials = grpc.ServerCredentials.createSsl(
       private_key: serverKey,
     },
   ],
-  true
+  true // The last argument true means the server requires client authentication.
 );
 
 // --------------------------------------------------

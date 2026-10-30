@@ -999,6 +999,11 @@ Timeout	 -  Stops waiting when the operation takes too long
 Error handling	-  Returns meaningful gRPC status codes instead of crashing
 Client error handling	 -  Handles timeout, unavailable gateway, and server errors
 
+Remaining Scenarios:
+1. UNAUTHENTICATED — gateway rejects a client without a valid mTLS certificate.
+2. INVALID_ARGUMENT — gateway rejects invalid banking request data.
+3. INTERNAL — gateway simulates an unexpected internal server error.
+
 ### Rebuild code changes and update Minikube images: It includes build → load into Minikube → restart → verify → run the client.
 
 Run everything from your POC directory: `bank-rest-internal-grpc-poc`.
@@ -1082,3 +1087,315 @@ I know your project has `Dockerfile.bank` and `Dockerfile.gateway`; I haven't co
 docker build --no-cache -t internal-app-client:latest -f Dockerfile.client .
 minikube image load internal-app-client:latest
 ```
+
+# gRPC Error Handling:
+
+## 1. What We Implemented
+
+We added error-handling scenarios to the banking communication flow:
+
+**External Bank REST API → Gateway (gRPC Server) → Internal Application (gRPC Client)**
+
+The gateway maps internal REST/API failures and validation errors to appropriate gRPC status codes. The internal client handles the returned errors and continues executing the remaining RPC operations.
+
+### Code changes
+
+**`gateway-service.js`**
+- Added `BANK_TIMEOUT` configuration to control the REST API request timeout.
+- Added `mapAxiosError()` to map REST/API errors to gRPC status codes.
+- Added `validateTransfer()` to validate transfer details before calling the REST API.
+- Added a `TEST_INTERNAL` flag to simulate an unexpected gateway failure.
+- Configured the gRPC server to require client certificates through mTLS.
+
+**`internal-app-client.js`**
+- Added RPC deadlines to prevent requests from waiting indefinitely.
+- Added error handling for gRPC status codes.
+- Added `TEST_INVALID_ARGUMENT` to send an invalid transfer amount.
+- Added `TEST_UNAUTHENTICATED` to connect without a client certificate.
+- Added error handling so one failed RPC does not stop the remaining RPC tests.
+
+## 2. Error Scenarios Tested
+
+| Scenario | gRPC status | Result |
+|---|---:|---|
+| Request deadline exceeded | `4 – DEADLINE_EXCEEDED` | Passed |
+| Invalid transfer amount | `3 – INVALID_ARGUMENT` | Passed |
+| Unexpected gateway failure | `13 – INTERNAL` | Passed |
+| Missing mTLS client certificate | `14 – UNAVAILABLE` | Passed |
+
+**Important:** Missing client certificate does not produce gRPC `UNAUTHENTICATED (16)` in this test. The TLS handshake fails before the request reaches the gRPC handler, and gRPC reports the connection failure as `UNAVAILABLE (14)`.
+
+## 3. Build and Load Updated Images
+
+Run these commands from the project directory:
+
+```bash
+cd /Users/keerthana/Desktop/rest-vs-grpc-poc/bank-rest-internal-grpc-poc
+```
+
+Build the gateway image:
+
+```bash
+docker build --no-cache -t gateway-service:debug-v2 -f Dockerfile.gateway .
+minikube image load gateway-service:debug-v2
+```
+
+Build the internal client image:
+
+```bash
+docker build --no-cache -t internal-app-client:debug-v2 -f Dockerfile.client .
+minikube image load internal-app-client:debug-v2
+```
+
+## 4. Update Gateway Deployment
+
+Update the gateway deployment to use the newly built image:
+
+```bash
+CONTAINER=$(kubectl get deployment gateway-service -o jsonpath='{.spec.template.spec.containers[0].name}')
+
+kubectl set image deployment/gateway-service "$CONTAINER=gateway-service:debug-v2"
+
+kubectl patch deployment gateway-service \
+  -p '{"spec":{"template":{"spec":{"containers":[{"name":"'"$CONTAINER"'","imagePullPolicy":"Never"}]}}}}'
+
+kubectl rollout status deployment/gateway-service
+```
+
+Check the gateway pods:
+
+```bash
+kubectl get pods -l app=gateway-service
+```
+
+## 5. Run the Error-Handling Tests
+
+For each test, delete the previous client pod before creating a new one. This prevents old completed-pod logs from being mistaken for the latest test.
+
+### Test 1: DEADLINE_EXCEEDED (4)
+
+The gateway REST request timeout must be shorter than the external REST API's 500 ms response delay.
+
+For the timeout test, temporarily set the gateway timeout to 100 ms:
+
+```bash
+kubectl set env deployment/gateway-service BANK_TIMEOUT=100
+kubectl rollout status deployment/gateway-service
+```
+
+Run the client with its normal valid mTLS certificate:
+
+```bash
+kubectl delete pod internal-app-client-pod --ignore-not-found
+
+kubectl run internal-app-client-pod \
+  --image=internal-app-client:debug-v2 \
+  --image-pull-policy=Never \
+  --restart=Never \
+  --env="GATEWAY_HOST=gateway-service.default.svc.cluster.local:3003"
+
+kubectl logs -f internal-app-client-pod
+```
+
+Expected transfer error:
+
+```text
+Code: 4
+Details: Bank REST API request timed out
+Reason: RPC exceeded its deadline
+```
+
+Restore the gateway timeout after the test:
+
+```bash
+kubectl set env deployment/gateway-service BANK_TIMEOUT=5000
+kubectl rollout status deployment/gateway-service
+```
+
+### Test 2: INVALID_ARGUMENT (3)
+
+Set the client test flag to send a negative transfer amount:
+
+```bash
+kubectl delete pod internal-app-client-pod --ignore-not-found
+
+kubectl run internal-app-client-pod \
+  --image=internal-app-client:debug-v2 \
+  --image-pull-policy=Never \
+  --restart=Never \
+  --env="GATEWAY_HOST=gateway-service.default.svc.cluster.local:3003" \
+  --env="TEST_INVALID_ARGUMENT=true"
+
+kubectl logs -f internal-app-client-pod
+```
+
+Expected output:
+
+```text
+Unary Transfer failed
+Code: 3
+Details: Transfer amount must be greater than zero
+Reason: Invalid request
+```
+
+The gateway rejects the invalid amount before making the REST API request.
+
+### Test 3: INTERNAL (13)
+
+Enable the gateway's internal-error simulation:
+
+```bash
+kubectl set env deployment/gateway-service TEST_INTERNAL=true
+kubectl rollout status deployment/gateway-service
+```
+
+Run the client with its valid mTLS certificate:
+
+```bash
+kubectl delete pod internal-app-client-pod --ignore-not-found
+
+kubectl run internal-app-client-pod \
+  --image=internal-app-client:debug-v2 \
+  --image-pull-policy=Never \
+  --restart=Never \
+  --env="GATEWAY_HOST=gateway-service.default.svc.cluster.local:3003"
+
+kubectl logs -f internal-app-client-pod
+```
+
+Expected output:
+
+```text
+Unary Transfer failed
+Code: 13
+Details: Unexpected internal banking gateway failure
+Reason: Internal server error
+```
+
+Disable the simulation after testing:
+
+```bash
+kubectl set env deployment/gateway-service TEST_INTERNAL-
+kubectl rollout status deployment/gateway-service
+```
+
+### Test 4: Missing mTLS Client Certificate
+
+Run the client without its client certificate:
+
+```bash
+kubectl delete pod internal-app-client-pod --ignore-not-found
+
+kubectl run internal-app-client-pod \
+  --image=internal-app-client:debug-v2 \
+  --image-pull-policy=Never \
+  --restart=Never \
+  --env="GATEWAY_HOST=gateway-service.default.svc.cluster.local:3003" \
+  --env="TEST_UNAUTHENTICATED=true"
+
+kubectl logs -f internal-app-client-pod
+```
+
+Expected output includes:
+
+```text
+TEST MODE: Connecting without client certificate
+Code: 14
+Details: No connection established
+tlsv13 alert certificate required
+```
+
+This confirms that the gateway rejects a client that does not present a certificate trusted by its mTLS configuration.
+
+### Test 5: UNAUTHENTICATED (16) – Application-Level Authentication
+
+**Implementation:**
+- Added `validateAuthentication()` in `gateway-service.js`.
+- Gateway checks the `authorization` metadata value.
+- Expected token: `Bearer bank-poc-secret`.
+- Missing or invalid token returns `grpc.status.UNAUTHENTICATED`.
+- Added `TEST_RPC_UNAUTHENTICATED` in `internal-app-client.js` to simulate a request without the authorization metadata.
+- mTLS remains enabled during this test.
+
+**Negative test – Missing token:**
+
+```bash
+kubectl delete pod internal-app-client-pod --ignore-not-found
+
+kubectl run internal-app-client-pod \
+  --image=internal-app-client:debug-v3 \
+  --image-pull-policy=Never \
+  --restart=Never \
+  --env="GATEWAY_HOST=gateway-service.default.svc.cluster.local:3003" \
+  --env="TEST_RPC_UNAUTHENTICATED=true"
+
+kubectl logs -f internal-app-client-pod
+```
+
+Expected result:
+
+```text
+Code: 16
+Details: Missing or invalid authentication token
+Reason: Caller authentication failed
+```
+
+**Positive test – Valid token:**
+
+```bash
+kubectl delete pod internal-app-client-pod --ignore-not-found
+
+kubectl run internal-app-client-pod \
+  --image=internal-app-client:debug-v3 \
+  --image-pull-policy=Never \
+  --restart=Never \
+  --env="GATEWAY_HOST=gateway-service.default.svc.cluster.local:3003"
+
+kubectl logs -f internal-app-client-pod
+```
+
+Expected result: Unary transfer succeeds and returns a bank transaction ID.
+
+**Observation:** mTLS authenticates the client certificate during the TLS handshake. Application-level authentication separately validates the authorization metadata. Missing certificates result in connection rejection (14), whereas missing application authentication results in `UNAUTHENTICATED (16)`.
+
+## 6. Useful Monitoring Commands
+
+View gateway logs:
+
+```bash
+kubectl logs deployment/gateway-service --tail=100
+```
+
+Check gateway deployment:
+
+```bash
+kubectl get deployment gateway-service
+```
+
+Check pods:
+
+```bash
+kubectl get pods
+```
+
+Check the client test output:
+
+```bash
+kubectl logs internal-app-client-pod
+```
+
+Delete the test client pod:
+
+```bash
+kubectl delete pod internal-app-client-pod --ignore-not-found
+```
+
+## 7. Important Notes
+
+- Always use the `debug-v2` image tags for these tests; the older `latest` images did not contain all the test changes.
+- Load the images into Minikube after rebuilding them.
+- Use `imagePullPolicy: Never` so Kubernetes uses the locally loaded image.
+- Delete the previous client pod before running another test.
+- Restore `BANK_TIMEOUT=5000` and remove `TEST_INTERNAL` after testing.
+- The client uses valid certificates for the INTERNAL and INVALID_ARGUMENT tests.
+- The missing-certificate scenario tests the TLS/mTLS handshake, not application-level gRPC authentication.
