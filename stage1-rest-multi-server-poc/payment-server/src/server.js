@@ -2,6 +2,9 @@
 const Fastify = require("fastify");
 const cors = require("@fastify/cors");
 const axios = require("axios");
+const {
+  registerAxiosInterceptor,
+} = require("../../shared/grpc-bridge");
 
 const app = Fastify({ logger: true });
 
@@ -9,6 +12,11 @@ app.register(cors, { origin: "http://localhost:3000" });
 
 const TRANSACTION_URL =
   process.env.TRANSACTION_SERVICE_URL || "http://localhost:4003";
+
+registerAxiosInterceptor(axios, {
+  httpOrigin: new URL(TRANSACTION_URL).origin,
+  grpcAddress: "localhost:50051",
+});
 
 let payments = [
   { id: 1, userId: 1, amount: 500, status: "SUCCESS" },
@@ -67,6 +75,108 @@ app.post("/transfer", async (request, reply) => {
       message: "Transaction service unavailable"
     });
   }
+});
+
+// ======================================
+// GENERIC TEST API FORWARDER
+// ======================================
+
+async function forwardToTransaction(
+  request,
+  reply,
+  method,
+  transactionPath
+) {
+  try {
+    const response = await axios.request({
+      method,
+      url: `${TRANSACTION_URL}${transactionPath}`,
+      data: method === "GET" ? undefined : request.body,
+      timeout: 15000,
+
+      // Preserve Transaction's HTTP status codes.
+      validateStatus: () => true,
+    });
+
+    return reply.code(response.status).send(response.data);
+  } catch (error) {
+    request.log.error(error);
+
+    return reply.code(502).send({
+      success: false,
+      message: "Transaction service unavailable",
+    });
+  }
+}
+
+// ======================================
+// 1. CRON TEST APIs
+// ======================================
+
+app.post("/test/cron/start", async (request, reply) => {
+  return forwardToTransaction(
+    request,
+    reply,
+    "POST",
+    "/test/cron/start"
+  );
+});
+
+app.get("/test/cron/status", async (request, reply) => {
+  return forwardToTransaction(
+    request,
+    reply,
+    "GET",
+    "/test/cron/status"
+  );
+});
+
+app.post("/test/cron/stop", async (request, reply) => {
+  return forwardToTransaction(
+    request,
+    reply,
+    "POST",
+    "/test/cron/stop"
+  );
+});
+
+// ======================================
+// 2. AGENDA TEST API
+// ======================================
+
+app.post("/test/agenda/schedule", async (request, reply) => {
+  return forwardToTransaction(
+    request,
+    reply,
+    "POST",
+    "/test/agenda/schedule"
+  );
+});
+
+// ======================================
+// 3. FILE UPLOAD TEST API
+// ======================================
+
+app.post("/test/files/upload", async (request, reply) => {
+  return forwardToTransaction(
+    request,
+    reply,
+    "POST",
+    "/test/files/upload"
+  );
+});
+
+// ======================================
+// 4. FILE DOWNLOAD TEST API
+// ======================================
+
+app.get("/test/files/:id/download", async (request, reply) => {
+  return forwardToTransaction(
+    request,
+    reply,
+    "GET",
+    `/test/files/${encodeURIComponent(request.params.id)}/download`
+  );
 });
 
 async function start() {

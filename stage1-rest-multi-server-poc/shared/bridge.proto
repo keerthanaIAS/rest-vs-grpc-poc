@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package bridge;
+
+service ApiBridge {
+  rpc Forward(GenericRequest) returns (GenericResponse);
+}
+
+message GenericRequest {
+  string method = 1;
+  string url = 2;
+  string headers_json = 3;
+  bytes payload = 4;
+}
+
+message GenericResponse {
+  int32 status = 1;
+  string headers_json = 2;
+  bytes payload = 3;
+}
