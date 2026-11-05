@@ -1,1 +1,0 @@
-{"name":"user-server","version":"1.0.0","private":true,"scripts":{"dev":"node src/server.js"},"dependencies":{"@fastify/cors":"^10.0.2","@grpc/grpc-js":"^1.14.7","@grpc/proto-loader":"^0.8.1","fastify":"^5.2.1","google-proto-files":"^6.1.0"}}
